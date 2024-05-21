@@ -18,11 +18,7 @@ type DisplayioAdapter struct {
 	endpoint *template.Template
 }
 
-type ReqExt struct {
-	DioExt ReqDioExt `json:"dio"`
-}
-
-type ReqDioExt struct {
+type reqDioExt struct {
 	UserSession string `json:"userSession,omitempty"`
 	PlacementId string `json:"placementId"`
 	InventoryId string `json:"inventoryId"`
@@ -34,8 +30,8 @@ func (adapter *DisplayioAdapter) MakeRequests(request *openrtb2.BidRequest, requ
 	headers.Add("Accept", "application/json")
 	headers.Add("x-openrtb-version", "2.5")
 
-	var reqExt map[string]interface{}
-	var dioExt ReqDioExt
+	var requestExt map[string]interface{}
+	var dioExt reqDioExt
 
 	if len(request.Imp) == 0 {
 		return nil, []error{&errortypes.BadInput{Message: "No impression in the bid request"}}
@@ -46,25 +42,15 @@ func (adapter *DisplayioAdapter) MakeRequests(request *openrtb2.BidRequest, requ
 	errs := make([]error, 0, len(impressions))
 
 	for i, impression := range impressions {
-		if impression.Banner == nil && impression.Video == nil {
-			errs = append(errs, &errortypes.BadInput{
-				Message: "Display.io only supports banner or video ads",
-			})
-			continue
-		}
-
 		if impression.BidFloor == 0 {
 			errs = append(errs, &errortypes.BadInput{
-				Message: "BidFloor cannot be zero",
+				Message: "BidFloor should be defined",
 			})
 			continue
 		}
 
 		if impression.BidFloorCur == "" {
-			errs = append(errs, &errortypes.BadInput{
-				Message: "BidFloorCur should be specified",
-			})
-			continue
+			impression.BidFloorCur = "USD"
 		}
 
 		if impression.BidFloorCur != "USD" {
@@ -101,37 +87,25 @@ func (adapter *DisplayioAdapter) MakeRequests(request *openrtb2.BidRequest, requ
 			errs = append(errs, err)
 			continue
 		}
-		if impressionExt.PublisherId == "" {
-			errs = append(errs, errors.New("publisherId required"))
-			continue
-		}
-		if impressionExt.InventoryId == "" {
-			errs = append(errs, errors.New("inventoryId required"))
-			continue
-		}
-		if impressionExt.PlacementId == "" {
-			errs = append(errs, errors.New("placementId required"))
-			continue
-		}
 
 		if i == 0 {
-			dioExt = ReqDioExt{PlacementId: impressionExt.PlacementId, InventoryId: impressionExt.InventoryId}
+			dioExt = reqDioExt{PlacementId: impressionExt.PlacementId, InventoryId: impressionExt.InventoryId}
 
-			err = json.Unmarshal(request.Ext, &reqExt)
+			err = json.Unmarshal(request.Ext, &requestExt)
 			if err != nil {
-				reqExt = make(map[string]interface{})
+				requestExt = make(map[string]interface{})
 			}
 
-			reqExt["displayio"] = dioExt
+			requestExt["displayio"] = dioExt
 
-			request.Ext, err = json.Marshal(reqExt)
+			request.Ext, err = json.Marshal(requestExt)
 			if err != nil {
 				errs = append(errs, err)
 				continue
 			}
 		}
 
-		request.Imp = impressions[i : i+1]
+		request.Imp = []openrtb2.Imp{impression}
 		body, err := json.Marshal(request)
 		if err != nil {
 			errs = append(errs, err)
@@ -161,20 +135,19 @@ func (adapter *DisplayioAdapter) MakeRequests(request *openrtb2.BidRequest, requ
 }
 
 // MakeBids translates Displayio bid response to prebid-server specific format
-func (adapter *DisplayioAdapter) MakeBids(internalRequest *openrtb2.BidRequest, _ *adapters.RequestData, response *adapters.ResponseData) (*adapters.BidderResponse, []error) {
+func (adapter *DisplayioAdapter) MakeBids(internalRequest *openrtb2.BidRequest, _ *adapters.RequestData, responseData *adapters.ResponseData) (*adapters.BidderResponse, []error) {
 
-	if response.StatusCode == http.StatusNoContent {
+	if adapters.IsResponseStatusCodeNoContent(responseData) {
 		return nil, nil
 	}
 
-	if response.StatusCode != http.StatusOK {
-		msg := fmt.Sprintf("Unexpected http status code: %d", response.StatusCode)
-		return nil, []error{&errortypes.BadServerResponse{Message: msg}}
+	if err := adapters.CheckResponseStatusCodeForErrors(responseData); err != nil {
+		return nil, []error{err}
 	}
 
 	var bidResp openrtb2.BidResponse
 
-	if err := json.Unmarshal(response.Body, &bidResp); err != nil {
+	if err := json.Unmarshal(responseData.Body, &bidResp); err != nil {
 		msg := fmt.Sprintf("Bad server response: %d", err)
 		return nil, []error{&errortypes.BadServerResponse{Message: msg}}
 	}
@@ -184,15 +157,25 @@ func (adapter *DisplayioAdapter) MakeBids(internalRequest *openrtb2.BidRequest, 
 		return nil, []error{&errortypes.BadServerResponse{Message: msg}}
 	}
 
-	bid := bidResp.SeatBid[0].Bid[0]
-	bidResponse := adapters.NewBidderResponseWithBidsCapacity(1)
+	var errs []error
+	bidResponse := adapters.NewBidderResponse()
 
-	bidResponse.Bids = append(bidResponse.Bids, &adapters.TypedBid{
-		Bid:     &bid,
-		BidType: GetMediaTypeForImp(bid.ImpID, internalRequest.Imp),
-	})
+	for _, sb := range bidResp.SeatBid {
+		for i := range sb.Bid {
+			bidType, err := getBidMediaTypeFromMtype(&sb.Bid[i])
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				b := &adapters.TypedBid{
+					Bid:     &sb.Bid[i],
+					BidType: bidType,
+				}
+				bidResponse.Bids = append(bidResponse.Bids, b)
+			}
+		}
+	}
 
-	return bidResponse, nil
+	return bidResponse, errs
 }
 
 func Builder(_ openrtb_ext.BidderName, config config.Adapter, _ config.Server) (adapters.Bidder, error) {
@@ -207,27 +190,15 @@ func Builder(_ openrtb_ext.BidderName, config config.Adapter, _ config.Server) (
 	return bidder, nil
 }
 
-const UndefinedMediaType = openrtb_ext.BidType("")
-
-func GetMediaTypeForImp(impID string, imps []openrtb2.Imp) openrtb_ext.BidType {
-	var bidType = UndefinedMediaType
-	for _, impression := range imps {
-		if impression.ID != impID {
-			continue
-		}
-		switch {
-		case impression.Banner != nil:
-			bidType = openrtb_ext.BidTypeBanner
-		case impression.Video != nil:
-			bidType = openrtb_ext.BidTypeVideo
-		case impression.Native != nil:
-			bidType = openrtb_ext.BidTypeNative
-		case impression.Audio != nil:
-			bidType = openrtb_ext.BidTypeAudio
-		}
-		break
+func getBidMediaTypeFromMtype(bid *openrtb2.Bid) (openrtb_ext.BidType, error) {
+	switch bid.MType {
+	case openrtb2.MarkupBanner:
+		return openrtb_ext.BidTypeBanner, nil
+	case openrtb2.MarkupVideo:
+		return openrtb_ext.BidTypeVideo, nil
+	default:
+		return "", fmt.Errorf("unexpected media type for bid: %s", bid.ImpID)
 	}
-	return bidType
 }
 
 func (adapter *DisplayioAdapter) buildEndpointURL(params *openrtb_ext.ExtImpDisplayio) (string, error) {

@@ -53,7 +53,7 @@
         "ext": {
           "bidder": {
             "placementId": "1011",
-            "publisherId": "1011",
+            "publisherId": "101",
             "inventoryId": "1011"
           }
         }
@@ -73,7 +73,7 @@
   "httpCalls": [
     {
       "expectedRequest": {
-        "uri": "http://test.com/pserver",
+        "uri": "https://101.prebid.display.io",
         "body": {
           "app": {
             "bundle": "displayio101",
@@ -128,7 +128,7 @@
               "ext": {
                 "bidder": {
                   "placementId": "1011",
-                  "publisherId": "1011",
+                  "publisherId": "101",
                   "inventoryId": "1011"
                 }
               }

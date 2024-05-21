@@ -11,8 +11,8 @@ import (
 
 func TestJsonSamples(t *testing.T) {
 	bidder, buildErr := Builder(openrtb_ext.BidderDisplayio,
-		config.Adapter{Endpoint: "http://test.com/pserver"},
-		config.Server{ExternalUrl: "http://test.com/pserver", GvlID: 1, DataCenter: "2"},
+		config.Adapter{Endpoint: "https://101.prebid.display.io"},
+		config.Server{ExternalUrl: "https://101.prebid.display.io"},
 	)
 
 	if buildErr != nil {

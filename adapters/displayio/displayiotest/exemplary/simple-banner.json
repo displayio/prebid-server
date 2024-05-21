@@ -34,7 +34,7 @@
         "ext": {
           "bidder": {
             "placementId": "1011",
-            "publisherId": "1011",
+            "publisherId": "101",
             "inventoryId": "1011"
           }
         }
@@ -60,7 +60,7 @@
   "httpCalls": [
     {
       "expectedRequest": {
-        "uri": "http://test.com/pserver",
+        "uri": "https://101.prebid.display.io",
         "body": {
           "id": "requestId10111011101110111011",
           "app": {
@@ -96,7 +96,7 @@
               "ext": {
                 "bidder": {
                   "placementId": "1011",
-                  "publisherId": "1011",
+                  "publisherId": "101",
                   "inventoryId": "1011"
                 }
               }
@@ -164,7 +164,7 @@
                   "wratio": 1,
                   "hratio": 1,
                   "dur": 10,
-                  "mtype": 2,
+                  "mtype": 1,
                   "ext": {
                     "dio": {
                       "impMethod": 2,
@@ -222,7 +222,7 @@
             "wratio": 1,
             "hratio": 1,
             "dur": 10,
-            "mtype": 2,
+            "mtype": 1,
             "ext": {
               "dio": {
                 "impMethod": 2,

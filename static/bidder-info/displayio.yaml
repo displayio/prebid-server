@@ -1,11 +1,9 @@
-#endpoint: "https://{{.PublisherID}}.prebid.display.io/"
-endpoint: "http://prebid.displayio.loc/?publisher={{.PublisherID}}"
+endpoint: "https://{{.PublisherID}}.prebid.display.io/"
 endpointCompression: gzip
 geoscope:
   - global
 maintainer:
   email: contact@display.io
-#gvlVendorID: XX
 modifyingVastXmlAllowed: true
 capabilities:
   app:
